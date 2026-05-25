@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use or reference the Repairable Error Contract Pattern, please cite it as below."
+title: "Repairable Error Contract Pattern"
+version: "0.1.0"
+date-released: "2026-05-25"
+authors:
+  - family-names: "Koschi"
+    given-names: "Martin"
+repository-code: "https://github.com/JueZ/Repairable-Error-Contract-Pattern-REC"
+abstract: "A proposed architecture pattern for safe, structured, actionable API and service failures that can be interpreted by humans, services, SDKs, CLIs, workflows, and LLM agents."
+keywords:
+  - "API design"
+  - "software architecture"
+  - "error handling"
+  - "LLM agents"
+  - "agentic systems"
+  - "microservices"
+  - "observability"
+  - "OpenAPI"
+  - "Problem Details"
+license: "CC-BY-4.0"
