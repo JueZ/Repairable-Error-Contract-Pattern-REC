@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repairable-error-contract.dev/schemas/repairable-problem.schema.json",
+  "title": "RepairableProblem",
+  "description": "Public Repairable Error Contract response returned to an API or service caller.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "title",
+    "status",
+    "detail",
+    "instance",
+    "rec_version",
+    "operation_id",
+    "diagnostic_id",
+    "classification",
+    "repairable",
+    "confidence",
+    "retry_policy",
+    "caller_instruction",
+    "safe_debug_summary",
+    "analysis_mode"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "status": {
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "instance": {
+      "type": "string",
+      "maxLength": 240,
+      "description": "A URI identifying the concrete diagnostic occurrence, for example urn:diagnostic:diag_abc123."
+    },
+    "rec_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "operation_id": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "diagnostic_id": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "trace_id": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "caller_contract_violation",
+        "semantic_precondition_missing",
+        "resource_not_found",
+        "authorization_context_mismatch",
+        "version_skew",
+        "dependency_failure",
+        "capacity_or_timeout",
+        "service_bug_likely",
+        "security_suspicious",
+        "diagnostic_uncertain"
+      ]
+    },
+    "domain_code": {
+      "type": "string",
+      "maxLength": 120,
+      "description": "Optional domain-specific subcode while preserving the top-level classification."
+    },
+    "repairable": {
+      "type": "boolean"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "retry_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "can_retry",
+        "same_request"
+      ],
+      "properties": {
+        "can_retry": {
+          "type": "boolean"
+        },
+        "same_request": {
+          "type": "boolean"
+        },
+        "retry_after_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000
+        },
+        "idempotency_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "invalid_fields": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "problem"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "JSONPath or JSON Pointer path for diagnostic fields. JSON Patch operations should use JSON Pointer."
+          },
+          "problem": {
+            "type": "string",
+            "maxLength": 240
+          },
+          "expected": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "received": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "suggestion": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      }
+    },
+    "repair_patch": {
+      "type": "array",
+      "maxItems": 10,
+      "description": "JSON Patch-like operations. Use only for deterministic and mechanically safe repairs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op",
+          "path"
+        ],
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "replace",
+              "move",
+              "copy",
+              "test"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "from": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "value": {}
+        }
+      }
+    },
+    "repair_plan": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "reason"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "provide_missing_value",
+              "replace_invalid_value",
+              "remove_unknown_field",
+              "call_prerequisite_operation",
+              "retry_with_modified_request",
+              "retry_later",
+              "do_not_change_request",
+              "report_diagnostic_id"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "value_hint": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "operation_id": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "correct_request_example": {},
+    "caller_instruction": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "llm_instruction": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Optional alias for GPT Actions or LLM-specific callers. Prefer caller_instruction for the standard field."
+    },
+    "safe_debug_summary": {
+      "type": "string",
+      "maxLength": 1000
+    },
+    "analysis_mode": {
+      "type": "string",
+      "enum": [
+        "deterministic",
+        "llm_assisted",
+        "hybrid",
+        "fallback"
+      ]
+    }
+  }
+}

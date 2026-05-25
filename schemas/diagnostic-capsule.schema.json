@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repairable-error-contract.dev/schemas/diagnostic-capsule.schema.json",
+  "title": "DiagnosticCapsule",
+  "description": "Private sanitized diagnostic evidence package used by a Repairable Error Contract analyzer. This object is not intended to be returned publicly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rec_version",
+    "diagnostic_id",
+    "operation_id",
+    "endpoint",
+    "method",
+    "failure_stage",
+    "http_status",
+    "safe_error",
+    "request_shape",
+    "contract_summary",
+    "safe_examples",
+    "security_policy"
+  ],
+  "properties": {
+    "rec_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "diagnostic_id": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "operation_id": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "endpoint": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "method": {
+      "type": "string",
+      "maxLength": 20
+    },
+    "failure_stage": {
+      "type": "string",
+      "enum": [
+        "json_parse",
+        "request_shape",
+        "input_validation",
+        "business_rule",
+        "upstream",
+        "dependency",
+        "internal",
+        "unknown"
+      ]
+    },
+    "http_status": {
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "trace_id": {
+      "type": "string",
+      "maxLength": 160
+    },
+    "safe_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 700
+        },
+        "original_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        }
+      }
+    },
+    "request_shape": {
+      "type": "object",
+      "description": "Shape-only representation of the request. Values must not be exposed.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "value_exposed"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "undefined",
+              "null",
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "unknown"
+            ]
+          },
+          "length_bucket": {
+            "type": "string",
+            "enum": [
+              "empty",
+              "short",
+              "medium",
+              "long"
+            ]
+          },
+          "value_exposed": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      }
+    },
+    "contract_summary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "required",
+        "properties"
+      ],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "aliases": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "safe_examples": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {}
+    },
+    "security_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_request_body_included",
+        "authorization_headers_included",
+        "tokens_included",
+        "stack_trace_included",
+        "raw_upstream_response_included",
+        "return_only_schema_valid_problem"
+      ],
+      "properties": {
+        "raw_request_body_included": {
+          "type": "boolean",
+          "const": false
+        },
+        "authorization_headers_included": {
+          "type": "boolean",
+          "const": false
+        },
+        "tokens_included": {
+          "type": "boolean",
+          "const": false
+        },
+        "stack_trace_included": {
+          "type": "boolean",
+          "const": false
+        },
+        "raw_upstream_response_included": {
+          "type": "boolean",
+          "const": false
+        },
+        "return_only_schema_valid_problem": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    }
+  }
+}
