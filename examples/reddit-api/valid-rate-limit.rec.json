@@ -1,0 +1,28 @@
+{
+  "type": "https://api.example.com/problems/reddit-thread/capacity-or-timeout",
+  "title": "Reddit rate limit reached",
+  "status": 429,
+  "detail": "Reddit rate-limited the upstream request.",
+  "instance": "urn:diagnostic:diag_example_rate_limit",
+  "rec_version": "0.1",
+  "operation_id": "postRedditThread",
+  "diagnostic_id": "diag_example_rate_limit",
+  "classification": "capacity_or_timeout",
+  "repairable": false,
+  "confidence": 0.9,
+  "retry_policy": {
+    "can_retry": true,
+    "same_request": true,
+    "retry_after_ms": 30000,
+    "idempotency_required": false
+  },
+  "repair_plan": [
+    {
+      "action": "retry_later",
+      "reason": "The upstream service asked callers to slow down."
+    }
+  ],
+  "caller_instruction": "Retry later with the same request. Do not change post, sort, maxComments, or maxMoreChildrenRequests to work around this error.",
+  "safe_debug_summary": "Upstream rate-limit response.",
+  "analysis_mode": "fallback"
+}

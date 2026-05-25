@@ -22,7 +22,7 @@
   "properties": {
     "rec_version": {
       "type": "string",
-      "const": "1.0"
+      "const": "0.1"
     },
     "diagnostic_id": {
       "type": "string",

@@ -1,14 +1,19 @@
-# Repairable Error Contracts: A Pattern for Actionable API Failures in Agentic and Service-Oriented Systems
+# Repairable Error Contracts: A Draft Pattern for Actionable API Failures in Agentic and Service-Oriented Systems
 
-**Author:** Martin Koschi
-**Version:** Draft 0.1
-**Date:** 2026-05-25
+**Author:** Martin Koschi  
+**Version:** Draft 0.1  
+**Date:** 2026-05-25  
+**Status:** Position paper / design note
 
 ## Abstract
 
 Modern APIs are usually specified around successful interaction: request schemas, response schemas, status codes, authentication, and examples. Failure behavior is often described less rigorously. In human-driven systems, vague failures increase debugging cost. In agentic systems, vague failures can cause autonomous callers to retry blindly, mutate unrelated parameters, or abandon tasks.
 
-This paper proposes the **Repairable Error Contract Pattern** (REC), an architecture pattern that treats failures as first-class contracts. A REC response classifies the failure, describes retry semantics, identifies invalid fields or missing preconditions, provides safe repair guidance, and includes correlation identifiers for diagnostics. The pattern is analyzer-independent: deterministic, LLM-assisted, hybrid, or fallback analyzers may produce REC responses, provided their output is schema-validated and policy-gated. This makes the pattern applicable to traditional service-to-service systems and emerging LLM-agent tool-use systems.
+This paper proposes the **Repairable Error Contract Pattern** (REC), a draft architecture pattern that treats failures as first-class contracts. A REC response classifies the failure, describes retry semantics, identifies invalid fields or missing preconditions, provides safe repair guidance, and includes correlation identifiers for diagnostics.
+
+The pattern is analyzer-independent: deterministic, LLM-assisted, hybrid, or fallback analyzers may produce REC responses, provided their output is schema-validated and policy-gated. This makes the pattern applicable to traditional service-to-service systems and emerging LLM-agent tool-use systems.
+
+REC is not intended to replace RFC 9457 Problem Details, OpenAPI, JSON Schema, JSON Patch, gRPC error details, Google-style API error models, logging, tracing, or observability. It is intended as a complementary pattern focused on explicit repair and retry semantics.
 
 ## 1. Introduction
 
@@ -26,15 +31,15 @@ A vague error such as:
 
 does not answer the questions a caller must answer:
 
-* Should I retry?
-* Should I retry the same request?
-* Should I change a parameter?
-* Which parameter?
-* Is this a dependency problem?
-* Is this a business precondition?
-* Is this a bug?
-* Should I ask a user for more information?
-* Should I stop?
+- Should I retry?
+- Should I retry the same request?
+- Should I change a parameter?
+- Which parameter?
+- Is this a dependency problem?
+- Is this a business precondition?
+- Is this a bug?
+- Should I ask a user for more information?
+- Should I stop?
 
 LLM agents are especially sensitive to this gap. When a tool call fails, an LLM may attempt to infer the correct call from the error message. If the error is vague, the model may invent parameter names, change valid values, or repeat failing calls.
 
@@ -42,7 +47,7 @@ The Repairable Error Contract Pattern proposes that APIs should expose not only 
 
 ## 2. Problem statement
 
-Traditional error handling creates several failure modes:
+Traditional error handling creates several failure modes.
 
 ### 2.1 Trial-and-error retries
 
@@ -88,32 +93,31 @@ Repairable error response
 
 The pattern separates private evidence from public guidance.
 
-The private diagnostic capsule contains safe, allowlisted context.
-
-The public repairable error response contains actionable guidance.
+The private diagnostic capsule contains safe, allowlisted context. The public repairable error response contains actionable guidance.
 
 ## 4. Public response
 
 A REC response contains:
 
-* stable failure type,
-* title,
-* HTTP status,
-* human-readable detail,
-* concrete diagnostic instance,
-* operation ID,
-* diagnostic ID,
-* classification,
-* repairability,
-* confidence,
-* retry policy,
-* invalid fields,
-* optional repair patch,
-* optional repair plan,
-* optional correct request example,
-* caller instruction,
-* safe debug summary,
-* analyzer mode.
+- stable failure type,
+- title,
+- HTTP status,
+- human-readable detail,
+- concrete diagnostic instance,
+- REC version,
+- operation ID,
+- diagnostic ID,
+- classification,
+- repairability,
+- confidence,
+- retry policy,
+- invalid fields,
+- optional repair patch,
+- optional repair plan,
+- optional correct request example,
+- caller instruction,
+- safe debug summary,
+- analyzer mode.
 
 The response is useful to humans and machines.
 
@@ -123,17 +127,17 @@ The diagnostic capsule is private. It is the safe input to an analyzer.
 
 It may include:
 
-* operation ID,
-* endpoint,
-* method,
-* failure stage,
-* status,
-* safe error code,
-* safe error message,
-* request shape,
-* contract summary,
-* safe examples,
-* security policy flags.
+- operation ID,
+- endpoint,
+- method,
+- failure stage,
+- status,
+- safe error code,
+- safe error message,
+- request shape,
+- contract summary,
+- safe examples,
+- security policy flags.
 
 It must not include raw secrets, stack traces, authorization headers, tokens, raw environment variables, or raw upstream bodies.
 
@@ -167,18 +171,18 @@ The safety model is part of the pattern.
 
 A REC implementation should enforce:
 
-* allowlisted diagnostic capsule construction,
-* no raw authorization headers,
-* no access tokens,
-* no secrets,
-* no raw stack traces,
-* no raw upstream bodies by default,
-* bounded text fields,
-* allowed classification taxonomy,
-* allowed request field paths,
-* allowed operation IDs,
-* schema validation,
-* deterministic fallback.
+- allowlisted diagnostic capsule construction,
+- no raw authorization headers,
+- no access tokens,
+- no secrets,
+- no raw stack traces,
+- no raw upstream bodies by default,
+- bounded text fields,
+- allowed classification taxonomy,
+- allowed request field paths,
+- allowed operation IDs,
+- schema validation,
+- deterministic fallback.
 
 For LLM-assisted analyzers, the LLM must not receive unrestricted logs or source context. It should receive only the sanitized capsule.
 
@@ -205,96 +209,114 @@ The taxonomy is intentionally small to improve adoption. Domain-specific systems
 
 REC distinguishes:
 
-* `repairable`,
-* `retry_policy.can_retry`,
-* `retry_policy.same_request`.
+- `repairable`,
+- `retry_policy.can_retry`,
+- `retry_policy.same_request`.
 
 This distinction prevents a common agent failure mode: changing request parameters when the failure is actually caused by rate limiting or an unavailable dependency.
 
-## 10. Case study: Reddit thread API
+## 10. Repair semantics
 
-A Reddit thread endpoint receives a `post` field. The caller may accidentally send `url` instead. A vague API returns “Bad Request.” A REC response can state:
+REC distinguishes `repair_patch` from `repair_plan`.
 
-* `url` is an alias-like unknown field,
-* `post` is required,
-* the caller should move the value to `post`,
-* retrying with the same request will not help,
-* a valid example is provided.
+`repair_patch` is used only for deterministic, mechanical repairs. It uses JSON Patch-style operations and JSON Pointer paths.
+
+`repair_plan` is used when a value, user decision, prerequisite operation, or business decision is required.
+
+This distinction is important because not every recoverable error is mechanically patchable.
+
+## 11. Case study: Reddit thread API
+
+A Reddit thread endpoint receives a `post` field. The caller may accidentally send `url` instead.
+
+A vague API returns “Bad Request.”
+
+A REC response can state:
+
+- `url` is an alias-like unknown field,
+- `post` is required,
+- the caller should move the value to `post`,
+- retrying with the same request will not help,
+- a valid example is provided.
 
 For unresolved Reddit share URLs, the response can state that the caller should not retry the same `/s/` URL and should provide a canonical comments URL, `redd.it` URL, `t3` fullname, or raw article ID.
 
 For rate limits, the response can state that the caller should retry later with the same request and not mutate parameters.
 
-## 11. Evaluation plan
+## 12. Evaluation plan
 
 A REC implementation can be evaluated with three experiments.
 
-### 11.1 LLM tool-call recovery
+### 12.1 LLM tool-call recovery
 
 Compare LLM agent success rates with:
 
-* vague errors,
-* normal validation errors,
-* REC responses.
+- vague errors,
+- normal validation errors,
+- REC responses.
 
 Measure:
 
-* successful task completion,
-* number of failed retries,
-* wrong-parameter retry rate,
-* token cost,
-* time to successful recovery.
+- successful task completion,
+- number of failed retries,
+- wrong-parameter retry rate,
+- token cost,
+- time to successful recovery.
 
-### 11.2 Human developer debugging
+### 12.2 Human developer debugging
 
 Compare developer diagnosis time with:
 
-* vague error plus logs,
-* REC response plus diagnostic ID.
+- vague error plus logs,
+- REC response plus diagnostic ID.
 
 Measure:
 
-* time to identify cause,
-* time to corrected request,
-* number of log lookups,
-* subjective clarity.
+- time to identify cause,
+- time to corrected request,
+- number of log lookups,
+- subjective clarity.
 
-### 11.3 Microservice retry behavior
+### 12.3 Microservice retry behavior
 
 Inject failures:
 
-* missing field,
-* invalid enum,
-* resource not found,
-* version skew,
-* dependency outage,
-* rate limit,
-* internal bug.
+- missing field,
+- invalid enum,
+- resource not found,
+- version skew,
+- dependency outage,
+- rate limit,
+- internal bug.
 
 Measure:
 
-* bad retries avoided,
-* correct retry behavior,
-* trace correlation,
-* classification accuracy.
+- bad retries avoided,
+- correct retry behavior,
+- trace correlation,
+- classification accuracy.
 
-## 12. Related concepts
+## 13. Related concepts
 
 REC complements:
 
-* OpenAPI,
-* JSON Schema,
-* Problem Details,
-* distributed tracing,
-* structured logging,
-* observability,
-* SDK generation,
-* CLI diagnostics,
-* LLM tool-use frameworks.
+- RFC 9457 Problem Details,
+- OpenAPI,
+- JSON Schema,
+- JSON Patch,
+- JSON Pointer,
+- gRPC richer error details,
+- Google-style API errors,
+- distributed tracing,
+- structured logging,
+- observability,
+- SDK generation,
+- CLI diagnostics,
+- LLM tool-use frameworks.
 
-REC does not replace these mechanisms. It combines them into a failure contract pattern.
+REC does not replace these mechanisms. It combines them into a failure contract pattern focused on recovery semantics.
 
-## 13. Limitations
+## 14. Limitations
 
 REC does not automatically fix all errors.
 
@@ -308,11 +330,15 @@ REC can be misused if public responses expose too much detail.
 
 REC requires careful schema and policy design.
 
-## 14. Conclusion
+REC v0.1 is a draft. It needs implementation experience and evaluation before it can be treated as a stable specification.
+
+## 15. Conclusion
 
 Modern APIs need failure contracts, not only success contracts.
 
-The Repairable Error Contract Pattern proposes a structured, safe, analyzer-independent way to make failures actionable for humans, services, workflows, and LLM agents. It enables immediate caller recovery while preserving security boundaries and supporting future diagnostic feedback loops.
+The Repairable Error Contract Pattern proposes a structured, safe, analyzer-independent way to make failures actionable for humans, services, workflows, and LLM agents.
+
+It enables immediate caller recovery while preserving security boundaries and supporting future diagnostic feedback loops.
 
 The key principle is simple:
 

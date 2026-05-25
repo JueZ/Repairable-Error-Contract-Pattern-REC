@@ -1,0 +1,26 @@
+{
+  "type": "https://api.example.com/problems/caller-contract-violation",
+  "title": "Invalid patch example",
+  "status": 400,
+  "detail": "This example is intentionally invalid because a JSON Patch move operation requires 'from'.",
+  "instance": "urn:diagnostic:diag_invalid_patch",
+  "rec_version": "0.1",
+  "operation_id": "postRedditThread",
+  "diagnostic_id": "diag_invalid_patch",
+  "classification": "caller_contract_violation",
+  "repairable": true,
+  "confidence": 0.9,
+  "retry_policy": {
+    "can_retry": true,
+    "same_request": false
+  },
+  "repair_patch": [
+    {
+      "op": "move",
+      "path": "/post"
+    }
+  ],
+  "caller_instruction": "This file must fail validation.",
+  "safe_debug_summary": "Invalid test fixture.",
+  "analysis_mode": "deterministic"
+}

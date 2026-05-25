@@ -1,0 +1,29 @@
+{
+  "type": "https://api.example.com/problems/semantic-precondition-missing",
+  "title": "A required business precondition is missing.",
+  "status": 409,
+  "detail": "The order cannot be shipped because payment has not been captured.",
+  "instance": "urn:diagnostic:diag_ship_001",
+  "rec_version": "0.1",
+  "operation_id": "shipOrder",
+  "diagnostic_id": "diag_ship_001",
+  "classification": "semantic_precondition_missing",
+  "domain_code": "payment_not_captured",
+  "repairable": true,
+  "confidence": 0.88,
+  "retry_policy": {
+    "can_retry": true,
+    "same_request": false,
+    "idempotency_required": true
+  },
+  "repair_plan": [
+    {
+      "action": "call_prerequisite_operation",
+      "operation_id": "capturePayment",
+      "reason": "Payment must be captured before shipping can be created."
+    }
+  ],
+  "caller_instruction": "Call capturePayment for this order before retrying shipOrder.",
+  "safe_debug_summary": "Business precondition failed after request validation.",
+  "analysis_mode": "deterministic"
+}

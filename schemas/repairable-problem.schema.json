@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://repairable-error-contract.dev/schemas/repairable-problem.schema.json",
   "title": "RepairableProblem",
-  "description": "Public Repairable Error Contract response returned to an API or service caller.",
+  "description": "Public Repairable Error Contract response returned to an API or service caller. REC v0.1 is intended as a Problem Details-compatible extension profile.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,7 +25,8 @@
   "properties": {
     "type": {
       "type": "string",
-      "maxLength": 200
+      "maxLength": 200,
+      "description": "Problem type URI or URI reference."
     },
     "title": {
       "type": "string",
@@ -47,7 +48,7 @@
     },
     "rec_version": {
       "type": "string",
-      "const": "1.0"
+      "const": "0.1"
     },
     "operation_id": {
       "type": "string",
@@ -127,7 +128,7 @@
           "path": {
             "type": "string",
             "maxLength": 120,
-            "description": "JSONPath or JSON Pointer path for diagnostic fields. JSON Patch operations should use JSON Pointer."
+            "description": "JSONPath or JSON Pointer path for diagnostic fields. JSON Patch operations use JSON Pointer."
           },
           "problem": {
             "type": "string",
@@ -151,36 +152,28 @@
     "repair_patch": {
       "type": "array",
       "maxItems": 10,
-      "description": "JSON Patch-like operations. Use only for deterministic and mechanically safe repairs.",
+      "description": "RFC 6902-style JSON Patch operations. Use only for deterministic and mechanically safe repairs. Paths are JSON Pointer paths.",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "op",
-          "path"
-        ],
-        "properties": {
-          "op": {
-            "type": "string",
-            "enum": [
-              "add",
-              "remove",
-              "replace",
-              "move",
-              "copy",
-              "test"
-            ]
+        "oneOf": [
+          {
+            "$ref": "#/$defs/jsonPatchAddOperation"
           },
-          "path": {
-            "type": "string",
-            "maxLength": 120
+          {
+            "$ref": "#/$defs/jsonPatchRemoveOperation"
           },
-          "from": {
-            "type": "string",
-            "maxLength": 120
+          {
+            "$ref": "#/$defs/jsonPatchReplaceOperation"
           },
-          "value": {}
-        }
+          {
+            "$ref": "#/$defs/jsonPatchMoveOperation"
+          },
+          {
+            "$ref": "#/$defs/jsonPatchCopyOperation"
+          },
+          {
+            "$ref": "#/$defs/jsonPatchTestOperation"
+          }
+        ]
       }
     },
     "repair_plan": {
@@ -248,6 +241,124 @@
         "hybrid",
         "fallback"
       ]
+    }
+  },
+  "$defs": {
+    "jsonPointer": {
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^(/([^/~]|~0|~1)*)*$",
+      "description": "JSON Pointer path."
+    },
+    "jsonPatchAddOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "path",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "add"
+        },
+        "path": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "value": {}
+      }
+    },
+    "jsonPatchRemoveOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "path"
+      ],
+      "properties": {
+        "op": {
+          "const": "remove"
+        },
+        "path": {
+          "$ref": "#/$defs/jsonPointer"
+        }
+      }
+    },
+    "jsonPatchReplaceOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "path",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "replace"
+        },
+        "path": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "value": {}
+      }
+    },
+    "jsonPatchMoveOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "from",
+        "path"
+      ],
+      "properties": {
+        "op": {
+          "const": "move"
+        },
+        "from": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "path": {
+          "$ref": "#/$defs/jsonPointer"
+        }
+      }
+    },
+    "jsonPatchCopyOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "from",
+        "path"
+      ],
+      "properties": {
+        "op": {
+          "const": "copy"
+        },
+        "from": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "path": {
+          "$ref": "#/$defs/jsonPointer"
+        }
+      }
+    },
+    "jsonPatchTestOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "path",
+        "value"
+      ],
+      "properties": {
+        "op": {
+          "const": "test"
+        },
+        "path": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "value": {}
+      }
     }
   }
 }

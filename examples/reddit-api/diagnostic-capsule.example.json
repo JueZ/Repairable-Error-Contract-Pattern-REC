@@ -1,0 +1,49 @@
+{
+  "rec_version": "0.1",
+  "diagnostic_id": "diag_example",
+  "operation_id": "postRedditThread",
+  "endpoint": "POST /api/reddit/thread",
+  "method": "POST",
+  "failure_stage": "input_validation",
+  "http_status": 400,
+  "safe_error": {
+    "code": "UNRESOLVED_REDDIT_SHARE_URL",
+    "message": "Could not resolve Reddit /s/ share URL to canonical /comments/<id> URL."
+  },
+  "request_shape": {
+    "post": {
+      "type": "string",
+      "length_bucket": "medium",
+      "value_exposed": false
+    }
+  },
+  "contract_summary": {
+    "required": [
+      "post"
+    ],
+    "properties": {
+      "post": {
+        "type": "string",
+        "acceptedFormats": [
+          "raw Reddit article ID",
+          "t3 fullname",
+          "redd.it URL",
+          "reddit.com comments URL"
+        ]
+      }
+    }
+  },
+  "safe_examples": [
+    {
+      "post": "https://www.reddit.com/r/redditdev/comments/abc123/example/"
+    }
+  ],
+  "security_policy": {
+    "raw_request_body_included": false,
+    "authorization_headers_included": false,
+    "tokens_included": false,
+    "stack_trace_included": false,
+    "raw_upstream_response_included": false,
+    "return_only_schema_valid_problem": true
+  }
+}

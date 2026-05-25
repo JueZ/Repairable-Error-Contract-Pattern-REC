@@ -1,0 +1,40 @@
+{
+  "type": "https://api.example.com/problems/reddit-thread/caller-contract-violation",
+  "title": "Request contract violation",
+  "status": 400,
+  "detail": "The request used 'url', but this operation expects 'post'.",
+  "instance": "urn:diagnostic:diag_example_alias",
+  "rec_version": "0.1",
+  "operation_id": "postRedditThread",
+  "diagnostic_id": "diag_example_alias",
+  "classification": "caller_contract_violation",
+  "repairable": true,
+  "confidence": 0.93,
+  "retry_policy": {
+    "can_retry": true,
+    "same_request": false,
+    "idempotency_required": false
+  },
+  "invalid_fields": [
+    {
+      "path": "$.url",
+      "problem": "alias_field",
+      "suggestion": "Use '$.post' instead."
+    }
+  ],
+  "repair_patch": [
+    {
+      "op": "move",
+      "from": "/url",
+      "path": "/post"
+    }
+  ],
+  "correct_request_example": {
+    "post": "https://www.reddit.com/r/redditdev/comments/abc123/example/",
+    "sort": "confidence",
+    "maxComments": 10000
+  },
+  "caller_instruction": "Retry using field 'post'. Do not use 'url', 'redditUrl', or 'threadUrl'.",
+  "safe_debug_summary": "Request body shape error before Reddit upstream call.",
+  "analysis_mode": "deterministic"
+}
