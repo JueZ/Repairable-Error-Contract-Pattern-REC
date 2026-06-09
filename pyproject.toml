@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repairable-error-contract"
+version = "0.1.0"
+description = "Minimal reference core for the Repairable Error Contract draft profile."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT-style for code and schemas; CC-BY-4.0 for prose" }
+authors = [
+  { name = "Martin Koschi" }
+]
+dependencies = [
+  "jsonschema>=4.18"
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8"
+]
+fastapi = [
+  "fastapi>=0.110"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

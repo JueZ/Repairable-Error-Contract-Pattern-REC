@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://repairable-error-contract.dev/schemas/repairable-problem.schema.json",
   "title": "RepairableProblem",
-  "description": "Public Repairable Error Contract response returned to an API or service caller.",
+  "description": "Public Repairable Error Contract response. REC v0.1.0 is an RFC 9457 Problem Details profile using extension members for repair and retry semantics.",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
     "type",
     "title",
@@ -12,20 +12,16 @@
     "detail",
     "instance",
     "rec_version",
-    "operation_id",
-    "diagnostic_id",
     "classification",
-    "repairable",
-    "confidence",
-    "retry_policy",
-    "caller_instruction",
-    "safe_debug_summary",
-    "analysis_mode"
+    "request_repairable",
+    "retry_policy"
   ],
   "properties": {
     "type": {
       "type": "string",
-      "maxLength": 200
+      "format": "uri-reference",
+      "maxLength": 300,
+      "description": "RFC 9457 problem type URI. It SHOULD dereference to human-readable documentation."
     },
     "title": {
       "type": "string",
@@ -38,28 +34,40 @@
     },
     "detail": {
       "type": "string",
-      "maxLength": 1000
+      "maxLength": 1000,
+      "description": "Human-readable detail. Do not echo caller-supplied secrets, raw upstream messages, stack traces, or internal resource-existence details."
     },
     "instance": {
       "type": "string",
+      "format": "uri-reference",
       "maxLength": 240,
       "description": "A URI identifying the concrete diagnostic occurrence, for example urn:diagnostic:diag_abc123."
     },
     "rec_version": {
       "type": "string",
-      "const": "1.0"
+      "pattern": "^0\\.1\\.[0-9]+$",
+      "description": "REC semantic version of the producer profile. v0.1.x producers preserve field semantics within this draft line."
     },
     "operation_id": {
       "type": "string",
-      "maxLength": 100
+      "maxLength": 100,
+      "description": "Operation identifier, preferably matching OpenAPI operationId."
     },
     "diagnostic_id": {
       "type": "string",
-      "maxLength": 100
+      "maxLength": 100,
+      "description": "Opaque public diagnostic correlation identifier."
     },
     "trace_id": {
       "type": "string",
-      "maxLength": 160
+      "maxLength": 160,
+      "description": "Trace or correlation identifier, when safe to expose."
+    },
+    "documentation_url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 300,
+      "description": "Optional URL with domain-specific remediation documentation."
     },
     "classification": {
       "type": "string",
@@ -79,39 +87,138 @@
     "domain_code": {
       "type": "string",
       "maxLength": 120,
-      "description": "Optional domain-specific subcode while preserving the top-level classification."
+      "description": "Optional domain-specific subcode while preserving the top-level REC classification."
     },
-    "repairable": {
-      "type": "boolean"
+    "request_repairable": {
+      "type": "boolean",
+      "description": "True when the caller can make progress by changing request data, credentials, visible resource reference, or a prerequisite business state. False for retry-unchanged, service-bug, suspicious, and no-action cases."
+    },
+    "agent_policy": {
+      "type": "string",
+      "enum": [
+        "modify_request",
+        "retry_unchanged",
+        "call_prerequisite",
+        "refresh_authorization",
+        "ask_user",
+        "report_diagnostic_id",
+        "abort_task",
+        "none"
+      ],
+      "description": "Closed machine action hint. This is the preferred machine channel; caller_instruction is explanatory prose."
     },
     "confidence": {
       "type": "number",
       "minimum": 0,
-      "maximum": 1
+      "maximum": 1,
+      "description": "Optional analyzer confidence. Do not treat as calibrated unless the producer documents calibration."
     },
     "retry_policy": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "can_retry",
-        "same_request"
+        "can_retry"
       ],
       "properties": {
         "can_retry": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "True when re-invoking the same operation may be useful after following REC guidance."
         },
         "same_request": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Meaningful only when can_retry is true. True means retry the exact same request payload and parameters; do not mutate request data. Authentication headers may be refreshed when the repair plan says so."
         },
         "retry_after_ms": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 3600000
+          "maximum": 3600000,
+          "description": "Delay before retrying. When the HTTP Retry-After header is present, this value MUST mirror it after conversion to milliseconds."
         },
         "idempotency_required": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "True when retrying should use an idempotency key or equivalent duplicate-suppression mechanism."
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "backoff_hint": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fixed",
+            "exponential",
+            "server_directed"
+          ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "can_retry": {
+                "const": true
+              }
+            },
+            "required": [
+              "can_retry"
+            ]
+          },
+          "then": {
+            "required": [
+              "same_request"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "can_retry": {
+                "const": false
+              }
+            },
+            "required": [
+              "can_retry"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "same_request"
+                  ]
+                },
+                {
+                  "required": [
+                    "retry_after_ms"
+                  ]
+                },
+                {
+                  "required": [
+                    "max_retries"
+                  ]
+                },
+                {
+                  "properties": {
+                    "backoff_hint": {
+                      "enum": [
+                        "fixed",
+                        "exponential",
+                        "server_directed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "backoff_hint"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "invalid_fields": {
       "type": "array",
@@ -125,9 +232,8 @@
         ],
         "properties": {
           "path": {
-            "type": "string",
-            "maxLength": 120,
-            "description": "JSONPath or JSON Pointer path for diagnostic fields. JSON Patch operations should use JSON Pointer."
+            "$ref": "#/$defs/jsonPointer",
+            "description": "RFC 6901 JSON Pointer to the offending request field. Use an empty string for the whole document."
           },
           "problem": {
             "type": "string",
@@ -139,7 +245,8 @@
           },
           "received": {
             "type": "string",
-            "maxLength": 200
+            "maxLength": 200,
+            "description": "Shape-only received value description, not a raw sensitive value."
           },
           "suggestion": {
             "type": "string",
@@ -148,10 +255,14 @@
         }
       }
     },
+    "errors_truncated": {
+      "type": "boolean",
+      "description": "True when invalid_fields or repair_plan has been truncated for response-size or safety reasons."
+    },
     "repair_patch": {
       "type": "array",
       "maxItems": 10,
-      "description": "JSON Patch-like operations. Use only for deterministic and mechanically safe repairs.",
+      "description": "RFC 6902 JSON Patch operations against the original request document. Emit only when deterministic or server-side verified.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -172,16 +283,70 @@
             ]
           },
           "path": {
-            "type": "string",
-            "maxLength": 120
+            "$ref": "#/$defs/jsonPointer"
           },
           "from": {
-            "type": "string",
-            "maxLength": 120
+            "$ref": "#/$defs/jsonPointer"
           },
           "value": {}
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "op": {
+                  "enum": [
+                    "move",
+                    "copy"
+                  ]
+                }
+              },
+              "required": [
+                "op"
+              ]
+            },
+            "then": {
+              "required": [
+                "from"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "op": {
+                  "enum": [
+                    "add",
+                    "replace",
+                    "test"
+                  ]
+                }
+              },
+              "required": [
+                "op"
+              ]
+            },
+            "then": {
+              "required": [
+                "value"
+              ]
+            }
+          }
+        ]
       }
+    },
+    "repair_patch_applicability": {
+      "type": "string",
+      "enum": [
+        "machine_applicable",
+        "maybe_incorrect",
+        "manual_only"
+      ],
+      "description": "Applicability of repair_patch, inspired by compiler fix-it applicability levels. Auto-apply only when machine_applicable and patch_verified is true."
+    },
+    "patch_verified": {
+      "type": "boolean",
+      "description": "True only when the producer applied the patch to the original request and re-validated it against the operation contract before emitting it."
     },
     "repair_plan": {
       "type": "array",
@@ -201,15 +366,17 @@
               "replace_invalid_value",
               "remove_unknown_field",
               "call_prerequisite_operation",
+              "refresh_authorization",
               "retry_with_modified_request",
               "retry_later",
               "do_not_change_request",
-              "report_diagnostic_id"
+              "ask_user",
+              "report_diagnostic_id",
+              "abort_task"
             ]
           },
           "path": {
-            "type": "string",
-            "maxLength": 120
+            "$ref": "#/$defs/jsonPointer"
           },
           "value_hint": {
             "type": "string",
@@ -226,15 +393,15 @@
         }
       }
     },
-    "correct_request_example": {},
+    "correct_request_example": {
+      "type": "object",
+      "maxProperties": 50,
+      "description": "Synthetic, safe example of a valid request. It MUST NOT contain caller-supplied secrets or raw user data."
+    },
     "caller_instruction": {
       "type": "string",
-      "maxLength": 1000
-    },
-    "llm_instruction": {
-      "type": "string",
       "maxLength": 1000,
-      "description": "Optional alias for GPT Actions or LLM-specific callers. Prefer caller_instruction for the standard field."
+      "description": "Short explanatory instruction for humans and agents. Machine callers should prefer agent_policy and structured fields."
     },
     "safe_debug_summary": {
       "type": "string",
@@ -248,6 +415,51 @@
         "hybrid",
         "fallback"
       ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "repair_patch"
+        ]
+      },
+      "then": {
+        "required": [
+          "repair_patch_applicability",
+          "patch_verified"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "analysis_mode": {
+            "const": "llm_assisted"
+          }
+        },
+        "required": [
+          "analysis_mode",
+          "repair_patch"
+        ]
+      },
+      "then": {
+        "properties": {
+          "patch_verified": {
+            "const": true
+          }
+        },
+        "required": [
+          "patch_verified"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "jsonPointer": {
+      "type": "string",
+      "maxLength": 180,
+      "pattern": "^(|(/([^/~]|~0|~1)*)*)$"
     }
   }
 }

@@ -1,6 +1,6 @@
 # Example: Reddit thread endpoint
 
-This example illustrates the Repairable Error Contract Pattern with a Reddit thread API endpoint.
+This example illustrates REC with a Reddit thread API endpoint. The examples use `application/problem+json`, RFC 9457 Problem Details members, REC extension members, RFC 6901 JSON Pointer paths, and RFC 6902 JSON Patch.
 
 ## Operation
 
@@ -56,12 +56,12 @@ REC response:
   "status": 400,
   "detail": "The request used 'url', but this operation expects 'post'.",
   "instance": "urn:diagnostic:diag_example_alias",
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "operation_id": "postRedditThread",
   "diagnostic_id": "diag_example_alias",
   "classification": "caller_contract_violation",
-  "repairable": true,
-  "confidence": 0.93,
+  "request_repairable": true,
+  "agent_policy": "modify_request",
   "retry_policy": {
     "can_retry": true,
     "same_request": false,
@@ -69,9 +69,9 @@ REC response:
   },
   "invalid_fields": [
     {
-      "path": "$.url",
+      "path": "/url",
       "problem": "alias_field",
-      "suggestion": "Use '$.post' instead."
+      "suggestion": "Use /post instead."
     }
   ],
   "repair_patch": [
@@ -81,6 +81,8 @@ REC response:
       "path": "/post"
     }
   ],
+  "repair_patch_applicability": "machine_applicable",
+  "patch_verified": true,
   "correct_request_example": {
     "post": "https://www.reddit.com/r/redditdev/comments/abc123/example/",
     "sort": "confidence",
@@ -88,7 +90,7 @@ REC response:
   },
   "caller_instruction": "Retry using field 'post'. Do not use 'url', 'redditUrl', or 'threadUrl'.",
   "safe_debug_summary": "Request body shape error before Reddit upstream call.",
-  "analysis_mode": "llm_assisted"
+  "analysis_mode": "deterministic"
 }
 ```
 
@@ -119,21 +121,29 @@ REC response:
   "status": 400,
   "detail": "The Reddit share URL could not be resolved to a canonical comments URL.",
   "instance": "urn:diagnostic:diag_example_share",
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "operation_id": "postRedditThread",
   "diagnostic_id": "diag_example_share",
   "classification": "caller_contract_violation",
-  "repairable": true,
+  "request_repairable": true,
+  "agent_policy": "modify_request",
   "confidence": 0.82,
   "retry_policy": {
     "can_retry": true,
     "same_request": false,
     "idempotency_required": false
   },
+  "invalid_fields": [
+    {
+      "path": "/post",
+      "problem": "unresolvable_share_url",
+      "expected": "canonical Reddit comments URL, redd.it URL, t3 fullname, or raw article ID"
+    }
+  ],
   "repair_plan": [
     {
       "action": "replace_invalid_value",
-      "path": "$.post",
+      "path": "/post",
       "value_hint": "Use a canonical /comments/<id> URL, redd.it URL, t3 fullname, or raw article ID.",
       "reason": "The share URL could not be resolved deterministically."
     }
@@ -146,7 +156,7 @@ REC response:
 
 ## Scenario 3: Reddit rate limit
 
-Upstream Reddit responds with rate limiting.
+Upstream Reddit responds with rate limiting. The HTTP response should include a `Retry-After` header when the delay is known, and `retry_after_ms` should mirror it after conversion to milliseconds.
 
 REC response:
 
@@ -155,24 +165,29 @@ REC response:
   "type": "https://api.example.com/problems/reddit-thread/capacity-or-timeout",
   "title": "Reddit rate limit reached",
   "status": 429,
-  "detail": "Reddit rate-limited the upstream request.",
+  "detail": "The upstream request was rate-limited.",
   "instance": "urn:diagnostic:diag_example_rate_limit",
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "operation_id": "postRedditThread",
   "diagnostic_id": "diag_example_rate_limit",
   "classification": "capacity_or_timeout",
-  "repairable": false,
-  "confidence": 0.9,
+  "request_repairable": false,
+  "agent_policy": "retry_unchanged",
   "retry_policy": {
     "can_retry": true,
     "same_request": true,
     "retry_after_ms": 30000,
-    "idempotency_required": false
+    "idempotency_required": false,
+    "backoff_hint": "server_directed"
   },
   "repair_plan": [
     {
       "action": "retry_later",
-      "reason": "The upstream service asked callers to slow down."
+      "reason": "This is a capacity or rate-limit failure, not a request-parameter failure."
+    },
+    {
+      "action": "do_not_change_request",
+      "reason": "Changing post, sort, maxComments, or maxMoreChildrenRequests is not expected to fix this failure."
     }
   ],
   "caller_instruction": "Retry later with the same request. Do not change post, sort, maxComments, or maxMoreChildrenRequests to work around this error.",
@@ -189,13 +204,13 @@ The caller knows not to mutate the request.
 
 ## LLM-assisted route
 
-The LLM should not see raw headers, tokens, stack traces, or raw upstream bodies.
+The LLM must not see raw headers, tokens, stack traces, raw request bodies, or raw upstream bodies. It should see only a sanitized Diagnostic Capsule.
 
-It should see only a sanitized diagnostic capsule, for example:
+Example capsule:
 
 ```json
 {
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "diagnostic_id": "diag_example",
   "operation_id": "postRedditThread",
   "endpoint": "POST /api/reddit/thread",
@@ -220,7 +235,7 @@ It should see only a sanitized diagnostic capsule, for example:
     "properties": {
       "post": {
         "type": "string",
-        "acceptedFormats": [
+        "accepted_formats": [
           "raw Reddit article ID",
           "t3 fullname",
           "redd.it URL",
@@ -234,7 +249,17 @@ It should see only a sanitized diagnostic capsule, for example:
       "post": "https://www.reddit.com/r/redditdev/comments/abc123/example/"
     }
   ],
+  "allowed_request_paths": [
+    "/post",
+    "/sort",
+    "/maxComments",
+    "/maxMoreChildrenRequests"
+  ],
+  "allowed_operation_ids": [
+    "postRedditThread"
+  ],
   "security_policy": {
+    "capsule_source": "allowlist",
     "raw_request_body_included": false,
     "authorization_headers_included": false,
     "tokens_included": false,
@@ -244,3 +269,5 @@ It should see only a sanitized diagnostic capsule, for example:
   }
 }
 ```
+
+The capsule is still only an input artifact. Any analyzer output, including LLM output, must pass the public schema and the policy gate before it is returned.

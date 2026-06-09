@@ -1,6 +1,6 @@
 # Example: Generic invoice API
 
-This example shows REC in a business API, independent of Reddit.
+This example shows REC in a business API independent of Reddit.
 
 ## Operation
 
@@ -42,11 +42,12 @@ REC response:
   "status": 422,
   "detail": "The request is missing 'customerId' and used 'currencyCode' instead of 'currency'.",
   "instance": "urn:diagnostic:diag_invoice_001",
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "operation_id": "createInvoice",
   "diagnostic_id": "diag_invoice_001",
   "classification": "caller_contract_violation",
-  "repairable": true,
+  "request_repairable": true,
+  "agent_policy": "modify_request",
   "confidence": 0.91,
   "retry_policy": {
     "can_retry": true,
@@ -55,14 +56,14 @@ REC response:
   },
   "invalid_fields": [
     {
-      "path": "$.customerId",
+      "path": "/customerId",
       "problem": "missing_required_field",
       "expected": "string"
     },
     {
-      "path": "$.currencyCode",
+      "path": "/currencyCode",
       "problem": "alias_field",
-      "suggestion": "Use '$.currency' instead."
+      "suggestion": "Use /currency instead."
     }
   ],
   "repair_patch": [
@@ -72,10 +73,12 @@ REC response:
       "path": "/currency"
     }
   ],
+  "repair_patch_applicability": "machine_applicable",
+  "patch_verified": true,
   "repair_plan": [
     {
       "action": "provide_missing_value",
-      "path": "$.customerId",
+      "path": "/customerId",
       "value_hint": "Use the stable customer identifier.",
       "reason": "The invoice operation requires a customerId."
     }
@@ -114,12 +117,13 @@ REC response:
   "status": 409,
   "detail": "The order cannot be shipped because payment has not been captured.",
   "instance": "urn:diagnostic:diag_ship_001",
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "operation_id": "shipOrder",
   "diagnostic_id": "diag_ship_001",
   "classification": "semantic_precondition_missing",
   "domain_code": "payment_not_captured",
-  "repairable": true,
+  "request_repairable": true,
+  "agent_policy": "call_prerequisite",
   "confidence": 0.88,
   "retry_policy": {
     "can_retry": true,
@@ -152,22 +156,28 @@ REC response:
   "status": 503,
   "detail": "The request format appears valid. The operation failed because a required dependency is unavailable.",
   "instance": "urn:diagnostic:diag_inventory_001",
-  "rec_version": "1.0",
+  "rec_version": "0.1.0",
   "operation_id": "reserveInventory",
   "diagnostic_id": "diag_inventory_001",
   "classification": "dependency_failure",
-  "repairable": false,
+  "request_repairable": false,
+  "agent_policy": "retry_unchanged",
   "confidence": 0.86,
   "retry_policy": {
     "can_retry": true,
     "same_request": true,
     "retry_after_ms": 30000,
-    "idempotency_required": true
+    "idempotency_required": true,
+    "backoff_hint": "server_directed"
   },
   "repair_plan": [
     {
       "action": "retry_later",
       "reason": "This failure is caused by a dependency outage, not by request parameters."
+    },
+    {
+      "action": "do_not_change_request",
+      "reason": "The original request shape is valid."
     }
   ],
   "caller_instruction": "Retry later with the same request and the same idempotency key. Do not invent alternative parameters.",
@@ -184,6 +194,7 @@ REC helps distinguish:
 Change your request.
 Retry later unchanged.
 Call a prerequisite operation.
+Refresh authorization.
 Report the diagnostic ID.
 Do not retry blindly.
 ```

@@ -1,19 +1,33 @@
-# Repairable Error Contract Pattern
+# Repairable Error Contract Pattern (REC)
 
 **Author:** Martin Koschi
 **Version:** 0.1.0
-**Status:** Draft pattern proposal
+**Status:** Draft RFC 9457 extension profile and reference-pattern proposal
 **Short name:** REC
 
 ## One-sentence definition
 
-A **Repairable Error Contract** is an API and service architecture pattern that turns failures into safe, structured, actionable error responses so humans, services, SDKs, CLIs, workflows, and LLM agents can understand what failed, whether to retry, what to change, and what not to change.
+A **Repairable Error Contract** is an RFC 9457 Problem Details profile that adds safe, structured repair and retry semantics so humans, SDKs, CLIs, workflows, services, and LLM agents know what failed, whether to retry, what to change, and what not to change.
+
+## What is actually new here
+
+REC intentionally reuses existing mechanisms instead of replacing them:
+
+* the envelope is **RFC 9457 Problem Details** (`type`, `title`, `status`, `detail`, `instance`, `application/problem+json`),
+* field-level diagnostics build on JSON Pointer / validation-error practice,
+* `repair_patch` is **RFC 6902 JSON Patch**,
+* `retry_after_ms` mirrors the HTTP `Retry-After` header when that header is present,
+* `trace_id` and `diagnostic_id` follow normal correlation-ID practice.
+
+The defensible REC contribution is narrower:
+
+1. **`retry_policy.same_request`**: separates “retrying may help” from “retry this exact request unchanged.” This is the anti-mutation guard for agents and autonomous callers.
+2. **Sanitized capsule → analyzer → policy gate**: an LLM may assist only from a private allowlisted diagnostic capsule, and its output is untrusted until schema-validated and policy-gated.
+3. **`repair_patch` vs `repair_plan`**: distinguishes machine-applicable request changes from judgment-required recovery steps.
 
 ## Why this pattern exists
 
-Modern APIs usually define what successful requests and responses look like. They often do not define failures with the same precision.
-
-A typical API failure still looks like this:
+Modern APIs usually define successful requests and responses better than failures. A vague failure such as:
 
 ```json
 {
@@ -21,69 +35,39 @@ A typical API failure still looks like this:
 }
 ```
 
-For a human developer, that is annoying.
+forces a human to inspect logs and encourages an autonomous caller to guess. For an LLM agent, that guess may be harmful: the agent may mutate valid parameters after a dependency outage, retry a non-idempotent operation blindly, or invent fields that do not exist.
 
-For an LLM agent or autonomous workflow, it is worse: the caller may retry blindly, invent new parameters, change the wrong field, or give up.
-
-The Repairable Error Contract Pattern proposes that APIs should expose a **failure contract**, not only a success contract.
-
-A failure response should answer:
+REC proposes a failure contract that answers:
 
 * What failed?
-* Where did it fail?
-* Was the request malformed?
-* Is the failure caused by the caller, the service, a dependency, rate limiting, authorization, or missing business preconditions?
+* Is the caller, service, dependency, capacity limit, authorization context, or business precondition involved?
 * Can the caller retry?
-* Should the caller retry the exact same request?
-* Should the caller change parameters?
-* Which fields are invalid?
-* Is there a safe example of a valid request?
-* What should an LLM agent, SDK, CLI, service, or human do next?
-* How can the failure be correlated with traces and logs?
+* Should the caller retry the exact same request unchanged?
+* Which request fields are invalid?
+* Is there a safe machine-applicable patch?
+* Is a prerequisite operation or user decision required?
+* Which details are safe to show publicly?
+* How can the public error be correlated with private diagnostics?
 
-## Core idea
+## Core architecture
 
 ```text
 Raw failure
   ↓
 Diagnostic boundary
   ↓
-Sanitized diagnostic capsule
+Sanitized Diagnostic Capsule              private, allowlisted, no secrets
   ↓
-Analyzer route
+Analyzer route                            deterministic / LLM-assisted / hybrid / fallback
   ↓
-Schema validation + policy gate
+Schema validation + policy gate           analyzer output is untrusted until accepted
   ↓
-Repairable error response
+RepairableProblem                         public application/problem+json response
 ```
 
-The analyzer route is intentionally pluggable.
+The pattern does **not** require an LLM. Deterministic REC is the default. LLM-assisted REC is optional and should normally be disabled unless the capsule builder, schema validation, policy gate, timeout, fallback, and non-leakage tests are in place.
 
-It may be:
-
-* deterministic,
-* LLM-assisted,
-* hybrid,
-* fallback-only,
-* or human-assisted in later operational workflows.
-
-The pattern does **not** require an LLM. It only makes LLM analysis safe and useful when an implementation chooses to use it.
-
-## Key distinction
-
-The pattern separates two artifacts:
-
-```text
-Public Repairable Error Response
-  Returned to the caller.
-
-Private Diagnostic Capsule
-  Sanitized evidence used for analysis.
-```
-
-The caller should not receive raw stack traces, raw logs, authorization headers, access tokens, environment variables, secrets, or raw upstream payloads.
-
-## Minimal response example
+## Minimal public response example
 
 ```json
 {
@@ -92,51 +76,53 @@ The caller should not receive raw stack traces, raw logs, authorization headers,
   "status": 400,
   "detail": "The request used 'url', but this operation expects 'post'.",
   "instance": "urn:diagnostic:diag_01HXAMPLE",
-  "rec_version": "1.0",
-
+  "rec_version": "0.1.0",
   "operation_id": "postRedditThread",
   "diagnostic_id": "diag_01HXAMPLE",
-
   "classification": "caller_contract_violation",
-  "repairable": true,
-  "confidence": 0.93,
-
+  "request_repairable": true,
+  "agent_policy": "modify_request",
   "retry_policy": {
     "can_retry": true,
     "same_request": false,
     "idempotency_required": false
   },
-
   "invalid_fields": [
     {
-      "path": "$.url",
+      "path": "/url",
       "problem": "alias_field",
-      "suggestion": "Use '$.post' instead."
+      "suggestion": "Use /post instead."
     }
   ],
-
-  "repair_plan": [
+  "repair_patch": [
     {
-      "action": "retry_with_modified_request",
-      "reason": "The endpoint requires the Reddit input in field 'post'."
+      "op": "move",
+      "from": "/url",
+      "path": "/post"
     }
   ],
-
+  "repair_patch_applicability": "machine_applicable",
+  "patch_verified": true,
   "correct_request_example": {
     "post": "https://www.reddit.com/r/redditdev/comments/abc123/example/",
     "sort": "confidence",
     "maxComments": 10000
   },
-
-  "caller_instruction": "Retry the operation with field 'post'. Do not use 'url', 'redditUrl', or 'threadUrl'.",
+  "caller_instruction": "Retry using field 'post'. Do not use 'url', 'redditUrl', or 'threadUrl'.",
   "safe_debug_summary": "Request body shape error before upstream call.",
-  "analysis_mode": "llm_assisted"
+  "analysis_mode": "deterministic"
 }
+```
+
+REC responses SHOULD be returned with:
+
+```http
+Content-Type: application/problem+json
 ```
 
 ## Classification taxonomy
 
-REC v0.1 proposes a small stable taxonomy:
+REC v0.1.0 defines these top-level classifications:
 
 ```text
 caller_contract_violation
@@ -151,36 +137,36 @@ security_suspicious
 diagnostic_uncertain
 ```
 
-Domain-specific systems may add `domain_code`, but the top-level classification should remain stable.
+Domain-specific systems may add `domain_code`, but the top-level `classification` should remain stable for SDKs, agents, alerting, and analytics.
 
-## Repair semantics
+## Retry and repair semantics
 
-REC separates three concepts that are often confused:
+REC separates request repair from retry behavior:
 
-| Field                       | Meaning                                         |
-| --------------------------- | ----------------------------------------------- |
-| `repairable`                | Can the caller fix something and try again?     |
-| `retry_policy.can_retry`    | Is retrying allowed or useful?                  |
-| `retry_policy.same_request` | Should the caller retry the exact same request? |
+| Field | Meaning |
+|---|---|
+| `request_repairable` | The caller can make progress by changing request data, credentials, visible resource reference, or a prerequisite state. |
+| `retry_policy.can_retry` | Re-invoking the same operation may be useful after following the REC guidance. |
+| `retry_policy.same_request` | Only valid when `can_retry` is true. `true` means retry the exact same request payload and parameters; do not mutate request data. |
+| `agent_policy` | Closed machine-action hint such as `modify_request`, `retry_unchanged`, `call_prerequisite`, or `report_diagnostic_id`. |
 
 Examples:
 
-| Scenario               | repairable |     can_retry | same_request |
-| ---------------------- | ---------: | ------------: | -----------: |
-| Missing required field |       true |          true |        false |
-| Invalid enum           |       true |          true |        false |
-| Resource not found     |       true |          true |        false |
-| Rate limit             |      false |          true |         true |
-| Dependency outage      |      false |          true |         true |
-| Internal bug           |      false | false or true |         true |
+| Scenario | `request_repairable` | `can_retry` | `same_request` | `agent_policy` |
+|---|---:|---:|---:|---|
+| Missing required field | true | true | false | `modify_request` |
+| Invalid enum | true | true | false | `modify_request` |
+| Missing business prerequisite | true | true | false | `call_prerequisite` |
+| Rate limit | false | true | true | `retry_unchanged` |
+| Dependency outage | false | true | true | `retry_unchanged` |
+| Internal bug | false | false | absent | `report_diagnostic_id` |
+| Suspicious request | false | false | absent | `abort_task` |
 
-This is especially important for LLM agents. If an upstream dependency fails, the agent should not invent alternative parameters.
+This is especially important for LLM agents. If a valid request fails because a dependency is unavailable, `same_request: true` tells the agent not to invent alternative parameters.
 
 ## `repair_patch` vs `repair_plan`
 
-REC supports two repair forms.
-
-Use `repair_patch` only when the repair is deterministic and mechanically safe:
+Use `repair_patch` only when the repair is deterministic or server-side verified:
 
 ```json
 {
@@ -190,57 +176,84 @@ Use `repair_patch` only when the repair is deterministic and mechanically safe:
       "from": "/url",
       "path": "/post"
     }
-  ]
+  ],
+  "repair_patch_applicability": "machine_applicable",
+  "patch_verified": true
 }
 ```
 
-Use `repair_plan` when a missing value, user decision, prerequisite operation, or business decision is required:
+Use `repair_plan` when a missing value, user decision, prerequisite operation, authorization refresh, or business decision is required:
 
 ```json
 {
   "repair_plan": [
     {
       "action": "replace_invalid_value",
-      "path": "$.post",
+      "path": "/post",
       "value_hint": "Use a canonical /comments/<id> URL, redd.it URL, t3 fullname, or raw article ID.",
-      "reason": "The Reddit share URL could not be resolved."
+      "reason": "The Reddit share URL could not be resolved deterministically."
     }
   ]
 }
 ```
 
+## Public/private diagnostic split
+
+REC uses two artifacts:
+
+```text
+Public RepairableProblem
+  Returned to the caller as application/problem+json.
+
+Private Diagnostic Capsule
+  Sanitized evidence used by analyzers and never returned directly.
+```
+
+The caller should not receive raw stack traces, raw logs, authorization headers, access tokens, cookies, environment variables, secrets, raw upstream payloads, or caller-supplied data echoed into instructions.
+
 ## Repository contents
 
-* `spec/rec-v0.1.md` — pattern and candidate specification
+* `spec/rec-v0.1.md` — draft profile and pattern specification
 * `schemas/repairable-problem.schema.json` — public REC response schema
 * `schemas/diagnostic-capsule.schema.json` — private diagnostic capsule schema
+* `src/rec/` — minimal Python reference core: fallback builder, deterministic helper, JSON Patch utility, policy gate, and optional FastAPI adapter
+* `tests/` — schema, retry-semantics, non-leakage, and policy-gate tests
+* `openapi.yaml` — OpenAPI 3.1 example using `application/problem+json` and `x-repairable-error`
 * `examples/reddit-api/README.md` — Reddit API case study
-* `examples/generic-invoice-api/README.md` — generic business API example
-* `paper/repairable-error-contract.md` — draft paper
+* `examples/generic-invoice-api/README.md` — business API scenarios
+* `examples/status-catalog/README.md` — 401, 403/hidden-404, 404, and 500 examples
+* `examples/fastapi-middleware/README.md` — optional FastAPI handler sketch
+* `benchmarks/agent-recovery/README.md` — proposed benchmark harness design
+* `paper/repairable-error-contract.md` — draft paper with prior-art positioning
+* `GOVERNANCE.md` — taxonomy, action registry, and versioning process
+* `CHANGELOG.md` — release notes
+* `REVIEW-REMEDIATION.md` — mapping from review findings to changes
 * `CITATION.cff` — citation metadata
 
 ## Maturity levels
 
 ```text
 Level 0: Traditional vague errors
-Level 1: Structured Problem Details
-Level 2: Repairable Error Contract
-Level 3: Analyzer route
-Level 4: LLM-assisted REC
-Level 5: Diagnostic feedback loop
+Level 1: RFC 9457 Problem Details
+Level 2: REC-Core Problem Details extensions
+Level 3: Deterministic REC analyzer route
+Level 4: LLM-assisted REC behind a capsule and policy gate
+Level 5: Diagnostic feedback loop into issues, tests, docs, and remediation workflows
 ```
 
-Automatic issue creation, clustering, and repository remediation are useful later extensions, but they are not part of the core REC pattern.
+Level 5 is intentionally outside REC-Core. Error clustering and remediation workflows are useful operational extensions, not the public error contract itself.
+
+## What REC is not
+
+REC is not a replacement for RFC 9457, OpenAPI, JSON Schema, tracing, logging, authentication, authorization, incident response, or secure exception handling. It is also not a claim that LLM analysis is automatically safe. REC is a profile and safety architecture for returning better failures when a system already has enough safe evidence to do so.
 
 ## License
 
 Specification, documentation, and diagrams are provided under **Creative Commons Attribution 4.0 International (CC BY 4.0)**.
 
-Code examples and schema snippets may be used under the **MIT-style permission grant** described in `LICENSE.md`.
+Code examples, JSON Schemas, OpenAPI snippets, and reference implementation files may be used under the **MIT-style permission grant** described in `LICENSE.md`.
 
 ## Citation
-
-If you reference this pattern, please cite:
 
 ```text
 Martin Koschi. Repairable Error Contract Pattern. Version 0.1.0. 2026.
