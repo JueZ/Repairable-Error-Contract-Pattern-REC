@@ -1,0 +1,164 @@
+openapi: 3.1.0
+info:
+  title: REC example API
+  version: 0.1.0
+  description: Example OpenAPI document showing Repairable Error Contract responses as RFC 9457 Problem Details extension members.
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+paths:
+  /api/reddit/thread:
+    post:
+      operationId: postRedditThread
+      summary: Fetch a Reddit thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - post
+              additionalProperties: false
+              properties:
+                post:
+                  type: string
+                  description: Reddit article ID, t3 fullname, redd.it URL, or canonical comments URL.
+                sort:
+                  type: string
+                  enum: [confidence, top, new, controversial, old, qa]
+                maxComments:
+                  type: integer
+                  minimum: 1
+                  maximum: 10000
+                maxMoreChildrenRequests:
+                  type: integer
+                  minimum: 0
+                  maximum: 1000
+      responses:
+        '200':
+          description: Thread was fetched.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  comments:
+                    type: array
+                    items:
+                      type: object
+        '400':
+          $ref: '#/components/responses/RepairableCallerContractViolation'
+        '429':
+          $ref: '#/components/responses/RepairableRateLimit'
+        '503':
+          $ref: '#/components/responses/RepairableDependencyFailure'
+      x-repairable-error:
+        recVersion: 0.1.0
+        defaultMode: deterministic
+        supportedModes:
+          - deterministic
+          - fallback
+          - hybrid
+        allowedRequestPaths:
+          - /post
+          - /sort
+          - /maxComments
+          - /maxMoreChildrenRequests
+        allowedOperationIds:
+          - postRedditThread
+        policyGateRequired: true
+        retry:
+          idempotencyRequired: false
+        security:
+          diagnosticCapsulePolicy: sanitized-only
+          exposeRawRequestBody: false
+          exposeHeaders: false
+          exposeTokens: false
+          exposeStackTrace: false
+          exposeRawUpstreamBody: false
+components:
+  schemas:
+    RepairableProblem:
+      $ref: './schemas/repairable-problem.schema.json'
+    DiagnosticCapsule:
+      $ref: './schemas/diagnostic-capsule.schema.json'
+  responses:
+    RepairableCallerContractViolation:
+      description: Request can be repaired by changing fields before retrying.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/RepairableProblem'
+          examples:
+            aliasField:
+              summary: url should be post
+              value:
+                type: https://api.example.com/problems/reddit-thread/caller-contract-violation
+                title: Request contract violation
+                status: 400
+                detail: The request used 'url', but this operation expects 'post'.
+                instance: urn:diagnostic:diag_example_alias
+                rec_version: 0.1.0
+                operation_id: postRedditThread
+                diagnostic_id: diag_example_alias
+                classification: caller_contract_violation
+                request_repairable: true
+                agent_policy: modify_request
+                retry_policy:
+                  can_retry: true
+                  same_request: false
+                  idempotency_required: false
+                invalid_fields:
+                  - path: /url
+                    problem: alias_field
+                    suggestion: Use /post instead.
+                repair_patch:
+                  - op: move
+                    from: /url
+                    path: /post
+                repair_patch_applicability: machine_applicable
+                patch_verified: true
+                caller_instruction: Retry using field 'post'. Do not use 'url'.
+                analysis_mode: deterministic
+      x-repairable-error:
+        recVersion: 0.1.0
+        defaultClassification: caller_contract_violation
+        defaultAgentPolicy: modify_request
+        allowedRequestPaths:
+          - /post
+          - /sort
+          - /maxComments
+          - /maxMoreChildrenRequests
+        patchPolicy:
+          autoApplyOnlyWhen:
+            applicability: machine_applicable
+            patchVerified: true
+    RepairableRateLimit:
+      description: Rate limit. Retry unchanged after delay.
+      headers:
+        Retry-After:
+          description: Seconds until retry, mirrored by retry_policy.retry_after_ms.
+          schema:
+            type: string
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/RepairableProblem'
+      x-repairable-error:
+        recVersion: 0.1.0
+        defaultClassification: capacity_or_timeout
+        defaultAgentPolicy: retry_unchanged
+        sameRequestDefault: true
+        retryAfterMirrorsHeader: Retry-After
+    RepairableDependencyFailure:
+      description: Downstream dependency failed. Retry unchanged when allowed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/RepairableProblem'
+      x-repairable-error:
+        recVersion: 0.1.0
+        defaultClassification: dependency_failure
+        defaultAgentPolicy: retry_unchanged
+        sameRequestDefault: true
